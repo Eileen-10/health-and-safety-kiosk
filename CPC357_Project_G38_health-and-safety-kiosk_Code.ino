@@ -267,18 +267,21 @@ void loop() {
     voneClient.publishTelemetryData(MQ2sensor, "Gas detector", airQuality);
 
     //Publish DHT data
-    float h = dht.readHumidity();
-    int t = dht.readTemperature();
+    float humidity = dht.readHumidity();
+    int temperature = dht.readTemperature();
 
     JSONVar payloadObject;
-    payloadObject["Humidity"] = h;
-    payloadObject["Temperature"] = t;
+    payloadObject["Humidity"] = humidity;
+    payloadObject["Temperature"] = temperature;
     voneClient.publishTelemetryData(DHT11Sensor, payloadObject);
 
     //Publish Infrared data
     int InfraredVal = !digitalRead(irPin);
     voneClient.publishTelemetryData(InfraredSensor, "Obstacle", InfraredVal);
 
+    //Publish Button data
+    int buttonPressed = digitalRead(buttonPin) == LOW ? 1 : 0;  //***BUGS!!!!!!!!!!!!!
+    voneClient.publishTelemetryData(DigitalInput, "Button1", buttonPressed);
   }
 }
 
