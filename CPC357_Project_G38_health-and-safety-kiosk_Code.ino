@@ -8,7 +8,6 @@ const char* InfraredSensor = "7d7db9fb-e622-4d13-960b-9de71873da24";  //Replace 
 const char* ServoMotor = "c565a9ed-57f5-4032-bda9-01274a7b8545";      //Replace this with YOUR deviceID for the servo
 const char* MQ2sensor = "b17689a8-6f25-4c8d-8888-552203a528e7";       //Replace this with YOUR deviceID for the MQ2 sensor
 const char* DHT11Sensor = "ad2efb66-75ef-48aa-b17c-3fe4d725d47c";     //Replace this with YOUR deviceID for the DHT11 sensor
-const char* DigitalInput = "69125c80-e8b8-42c2-81b8-718b86ad71de";    //Replace with the deviceID of YOUR push button
 const char* LEDLight1 = "05718b95-249e-410c-9adc-aae478125d7e";       //Replace this with YOUR deviceID for the first LED
 const char* LEDLight2 = "cf0292bc-84b9-45e3-b1b2-f9c3394273c6";       //Replace this with YOUR deviceID for the second LED
 const char* LEDLight3 = "cae948a5-d7d8-46b8-a2e5-4ba5ed29b184";       //Replace this with YOUR deviceID for the third LED
@@ -18,12 +17,10 @@ const int ledPinG = 5;        // Green LED (Maker: Pin 5)
 const int ledPinY = 9;        // Yellow LED (Maker: Pin 9) 
 const int ledPinR = 10;       // Red LED (Maker: Pin 10) 
 const int servoPin = 39;      // Servo (Maker: Pin 39)
-const int buttonPin = 40;     // Push button (Maker: Pin 40)
 const int dht11Pin = 42;      // DHT11 sensor (Maker: Pin 42, Right Maker Port)
 const int mqPin = A2;         // MH MQ Sensor (Middle Maker Port) 
 
 bool irDetected = false;      // Tracks IR sensor state
-bool buttonPressed = false;   // Tracks button state
 float airQuality = 0;         // Air quality reading
 float temperature = 0.0;      // Temperature value
 float humidity = 0.0;         // Humidity value
@@ -171,7 +168,6 @@ void setup() {
   pinMode(ledPinG, OUTPUT);
   pinMode(ledPinY, OUTPUT);
   pinMode(ledPinR, OUTPUT);
-  pinMode(buttonPin, INPUT_PULLUP);
 
   dht.begin();
   myServo.attach(servoPin);
@@ -191,7 +187,6 @@ void loop() {
     voneClient.publishDeviceStatusEvent(InfraredSensor, true);
     voneClient.publishDeviceStatusEvent(MQ2sensor, true);
     voneClient.publishDeviceStatusEvent(DHT11Sensor, true);
-    voneClient.publishDeviceStatusEvent(DigitalInput, true);
   }
   voneClient.loop();
 
@@ -224,11 +219,6 @@ void loop() {
     // voneClient.publishTelemetryData(InfraredSensor, "Obstacle", irDetected);
     if (irDetected){Serial.println("Object Detected!");}
 
-    //Publish Button data
-    bool buttonPressed = (digitalRead(buttonPin) == LOW);  // Read button pressed
-    // voneClient.publishTelemetryData(DigitalInput, "Button1", buttonPressed);
-    if (buttonPressed){Serial.println("Button Pressed!");}
-
 
     // LED Control for Air Pollution Levels
     if (airQuality < 100) {         // Low pollution
@@ -241,7 +231,7 @@ void loop() {
 
     // Servo Control (Mask Dispenser)
     // If moderate/high polution, detected object (human) & button pressed
-    if ((airQuality >= 100) && (irDetected && buttonPressed)) {  
+    if ((airQuality >= 100) && irDetected) {  
       Serial.println("Dispensing mask...");
       myServo.write(90);            // Move servo to active position
       // [***Adjust on how the servo dispense the mask***]
@@ -249,6 +239,5 @@ void loop() {
     } else {
       myServo.write(0);             // Move servo to idle position
     }
-
   }
 }
