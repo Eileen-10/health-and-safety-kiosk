@@ -24,6 +24,7 @@ bool irDetected = false;      // Tracks IR sensor state
 float airQuality = 0;         // Air quality reading
 float temperature = 0.0;      // Temperature value
 float humidity = 0.0;         // Humidity value
+volatile int maskDispensed = 0;
 
 Servo myServo;  // Create a Servo object
 DHT dht(dht11Pin, DHTTYPE);
@@ -196,7 +197,7 @@ void loop() {
 
     //Publish MQ2 data
     airQuality = analogRead(mqPin);             // Read air quality
-    // voneClient.publishTelemetryData(MQ2sensor, "Gas detector", airQuality);
+    voneClient.publishTelemetryData(MQ2sensor, "Gas detector", airQuality);
     Serial.print("Air Quality Value: ");
     Serial.println(airQuality);
 
@@ -204,10 +205,10 @@ void loop() {
     float humidity = dht.readHumidity();     // Read humidity
     int temperature = dht.readTemperature(); // Read temperature
 
-    // JSONVar payloadObject;
-    // payloadObject["Humidity"] = humidity;
-    // payloadObject["Temperature"] = temperature;
-    // voneClient.publishTelemetryData(DHT11Sensor, payloadObject);
+    JSONVar payloadObject;
+    payloadObject["Humidity"] = humidity;
+    payloadObject["Temperature"] = temperature;
+    voneClient.publishTelemetryData(DHT11Sensor, payloadObject);
     Serial.print("Temperature: ");
     Serial.print(temperature);
     Serial.print(" °C, Humidity: ");
@@ -216,8 +217,13 @@ void loop() {
 
     //Publish Infrared data
     bool irDetected = (digitalRead(irPin) == LOW);       // Read object detected
-    // voneClient.publishTelemetryData(InfraredSensor, "Obstacle", irDetected);
-    if (irDetected){Serial.println("Object Detected!");}
+    if (irDetected){  // Accumulate number of mask dispensed
+      maskDispensed++;
+      Serial.println("Object Detected!");
+      Serial.print("Mask Dispensed: ");
+      Serial.println(maskDispensed);
+    }
+    voneClient.publishTelemetryData(InfraredSensor, "Obstacle", maskDispensed);
 
 
     // LED Control for Air Pollution Levels
@@ -239,5 +245,7 @@ void loop() {
     } else {
       myServo.write(0);             // Move servo to idle position
     }
+
+    delay(5000);
   }
 }
