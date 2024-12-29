@@ -230,7 +230,7 @@ void loop() {
     }
 
     // Servo Control (Mask Dispenser)
-    // If moderate/high polution, detected object (human) & button pressed
+    // If moderate/high polution, detected object (hand)
     if ((airQuality >= 100) && irDetected) {  
       Serial.println("Dispensing mask...");
       myServo.write(90);            // Move servo to active position
