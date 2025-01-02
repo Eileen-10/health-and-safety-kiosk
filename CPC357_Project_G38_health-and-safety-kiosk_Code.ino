@@ -1,13 +1,46 @@
 #include "VOneMqttClient.h"
 #include <ESP32Servo.h> 
-#include "DHT.h"
-#define DHTTYPE DHT11
+#include "SCD30.h"
+
+#if defined(ARDUINO_ARCH_AVR)
+    #pragma message("Defined architecture for ARDUINO_ARCH_AVR.")
+    #define SERIAL Serial
+#elif defined(ARDUINO_ARCH_SAM)
+    #pragma message("Defined architecture for ARDUINO_ARCH_SAM.")
+    #ifdef SEEED_XIAO_M0
+        #define SERIAL Serial
+    #elif defined(ARDUINO_SAMD_VARIANT_COMPLIANCE)
+        #define SERIAL SerialUSB
+    #else
+        #define SERIAL Serial
+    #endif
+#elif defined(ARDUINO_ARCH_SAMD)
+    #pragma message("Defined architecture for ARDUINO_ARCH_SAMD.")
+    #ifdef SEEED_XIAO_M0
+        #define SERIAL Serial
+    #elif defined(ARDUINO_SAMD_VARIANT_COMPLIANCE)
+        #define SERIAL SerialUSB
+    #else
+        #define SERIAL Serial
+    #endif
+#elif defined(ARDUINO_ARCH_STM32F4)
+    #pragma message("Defined architecture for ARDUINO_ARCH_STM32F4.")
+    #ifdef SEEED_XIAO_M0
+        #define SERIAL Serial
+    #elif defined(ARDUINO_SAMD_VARIANT_COMPLIANCE)
+        #define SERIAL SerialUSB
+    #else
+        #define SERIAL Serial
+    #endif
+#else
+    #pragma message("Not found any architecture.")
+    #define SERIAL Serial
+#endif
 
 // Define device ID
 const char* InfraredSensor = "7d7db9fb-e622-4d13-960b-9de71873da24";  //Replace with the deviceID of YOUR infrared sensor
 const char* ServoMotor = "c565a9ed-57f5-4032-bda9-01274a7b8545";      //Replace this with YOUR deviceID for the servo
-const char* MQ2sensor = "b17689a8-6f25-4c8d-8888-552203a528e7";       //Replace this with YOUR deviceID for the MQ2 sensor
-const char* DHT11Sensor = "ad2efb66-75ef-48aa-b17c-3fe4d725d47c";     //Replace this with YOUR deviceID for the DHT11 sensor
+const char* SCDsensor = "5a5b9257-d5d1-4426-b905-37dbe3bada24";       //Replace this with YOUR deviceID for the MQ2 sensor
 const char* LEDLight1 = "05718b95-249e-410c-9adc-aae478125d7e";       //Replace this with YOUR deviceID for the first LED
 const char* LEDLight2 = "cf0292bc-84b9-45e3-b1b2-f9c3394273c6";       //Replace this with YOUR deviceID for the second LED
 const char* LEDLight3 = "cae948a5-d7d8-46b8-a2e5-4ba5ed29b184";       //Replace this with YOUR deviceID for the third LED
@@ -17,17 +50,16 @@ const int ledPinG = 5;        // Green LED (Maker: Pin 5)
 const int ledPinY = 9;        // Yellow LED (Maker: Pin 9) 
 const int ledPinR = 10;       // Red LED (Maker: Pin 10) 
 const int servoPin = 39;      // Servo (Maker: Pin 39)
-const int dht11Pin = 42;      // DHT11 sensor (Maker: Pin 42, Right Maker Port)
-const int mqPin = A2;         // MH MQ Sensor (Middle Maker Port) 
+const int SCDPin = 42;         // MH MQ Sensor (Middle Maker Port) 
 
 bool irDetected = false;      // Tracks IR sensor state
-float airQuality = 0;         // Air quality reading
+float SCDresult[3] = {0};
+float CO2Concentration = 0;   // CO2 concentration
 float temperature = 0.0;      // Temperature value
 float humidity = 0.0;         // Humidity value
 volatile int maskDispensed = 0;
 
 Servo myServo;  // Create a Servo object
-DHT dht(dht11Pin, DHTTYPE);
 
 VOneMqttClient voneClient;  // Create an insance of VOneMqttClient
 unsigned long lastMsgTime = 0;  // Last message time
@@ -162,15 +194,15 @@ void setup() {
   setup_wifi();
   voneClient.setup();
   voneClient.registerActuatorCallback(triggerActuator_callback);
-  Serial.println("Gas sensor warming up!");
-  delay(20000);  // allow the MQ-2 to warm up
+  Wire.begin();
+  scd30.initialize();
 
   pinMode(irPin, INPUT);
   pinMode(ledPinG, OUTPUT);
   pinMode(ledPinY, OUTPUT);
   pinMode(ledPinR, OUTPUT);
 
-  dht.begin();
+  // dht.begin();
   myServo.attach(servoPin);
   myServo.write(0); // Initialize servo to idle position (0 degrees)
 
@@ -186,8 +218,7 @@ void loop() {
     voneClient.reconnect();
     String errorMsg = "Sensor Fail";
     voneClient.publishDeviceStatusEvent(InfraredSensor, true);
-    voneClient.publishDeviceStatusEvent(MQ2sensor, true);
-    voneClient.publishDeviceStatusEvent(DHT11Sensor, true);
+    voneClient.publishDeviceStatusEvent(SCDsensor, true);
   }
   voneClient.loop();
 
@@ -195,25 +226,30 @@ void loop() {
   if (currentMillis - lastMsgTime > INTERVAL) {
     lastMsgTime = currentMillis;
 
-    //Publish MQ2 data
-    airQuality = analogRead(mqPin);             // Read air quality
-    voneClient.publishTelemetryData(MQ2sensor, "Gas detector", airQuality);
-    Serial.print("Air Quality Value: ");
-    Serial.println(airQuality);
+    //Publish SCD data
+    if (scd30.isAvailable()) {
+        scd30.getCarbonDioxideConcentration(SCDresult);
+        SERIAL.print("Carbon Dioxide Concentration: ");
+        SERIAL.print(SCDresult[0]);
+        SERIAL.println(" ppm");
+        CO2Concentration = SCDresult[0];
+        SERIAL.print("Temperature: ");
+        SERIAL.print(SCDresult[1]);
+        SERIAL.println(" ℃");
+        temperature = SCDresult[1];
+        SERIAL.print("Humidity: ");
+        SERIAL.print(SCDresult[2]);
+        SERIAL.println(" %");
+        humidity = SCDresult[2];
+        SERIAL.println(" ");
 
-    //Publish DHT data
-    float humidity = dht.readHumidity();     // Read humidity
-    int temperature = dht.readTemperature(); // Read temperature
-
-    JSONVar payloadObject;
-    payloadObject["Humidity"] = humidity;
-    payloadObject["Temperature"] = temperature;
-    voneClient.publishTelemetryData(DHT11Sensor, payloadObject);
-    Serial.print("Temperature: ");
-    Serial.print(temperature);
-    Serial.print(" °C, Humidity: ");
-    Serial.print(humidity);
-    Serial.println(" %");  
+        JSONVar payloadObject;
+        payloadObject["CO2 Concentration"] = CO2Concentration;
+        payloadObject["Temperature"] = temperature;
+        payloadObject["Humidity"] = humidity;
+        voneClient.publishTelemetryData(SCDsensor, payloadObject);
+    }
+    delay(2000);
 
     //Publish Infrared data
     bool irDetected = (digitalRead(irPin) == LOW);       // Read object detected
@@ -227,9 +263,9 @@ void loop() {
 
 
     // LED Control for Air Pollution Levels
-    if (airQuality < 100) {         // Low pollution
+    if (SCDresult[0] < 100) {         // Low pollution
       digitalWrite(ledPinG, HIGH);  // Green light
-    } else if (airQuality >= 100 && airQuality < 2500) {  // Moderate pollution
+    } else if (SCDresult[0] >= 100 && SCDresult[0] < 2500) {  // Moderate pollution
       digitalWrite(ledPinY, HIGH);                        // Yellow light
     } else {                        // High pollution
       digitalWrite(ledPinR, HIGH);  // Red light
@@ -237,10 +273,9 @@ void loop() {
 
     // Servo Control (Mask Dispenser)
     // If moderate/high polution, detected object (hand)
-    if ((airQuality >= 100) && irDetected) {  
+    if ((SCDresult[0] >= 100) && irDetected) {  
       Serial.println("Dispensing mask...");
       myServo.write(90);            // Move servo to active position
-      // [***Adjust on how the servo dispense the mask***]
       delay(1000);                  // Hold position for 1 second
     } else {
       myServo.write(0);             // Move servo to idle position
